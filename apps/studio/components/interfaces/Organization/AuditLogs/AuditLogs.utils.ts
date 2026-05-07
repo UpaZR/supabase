@@ -19,6 +19,12 @@ export function filterByProjects(logs: AuditLog[], projectRefs: string[]): Audit
   return logs.filter((log) => projectRefs.includes(log.project_ref ?? ''))
 }
 
+export function filterByProjectRefSearch(logs: AuditLog[], search: string): AuditLog[] {
+  const trimmed = search.trim().toLowerCase()
+  if (trimmed.length === 0) return logs
+  return logs.filter((log) => (log.project_ref ?? '').toLowerCase().includes(trimmed))
+}
+
 // [Joshen] Mainly to handle if a single date is selected - currently just for Audit Logs as
 // i'm on the fence if this logic should be within the DatePicker component itself
 // e.g for Logs.DatePicker which uses this component, the component itself has its own time selection UI

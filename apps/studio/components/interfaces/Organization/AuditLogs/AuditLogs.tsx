@@ -3,7 +3,7 @@ import { keepPreviousData } from '@tanstack/react-query'
 import { useDebounce } from '@uidotdev/usehooks'
 import { useParams } from 'common'
 import dayjs from 'dayjs'
-import { ArrowDown, ArrowUp, RefreshCw, User } from 'lucide-react'
+import { ArrowDown, ArrowUp, RefreshCw, Search, User, X } from 'lucide-react'
 import Image from 'next/legacy/image'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -13,9 +13,15 @@ import {
   Button,
   WarningIcon,
 } from 'ui'
+import { Input } from 'ui-patterns/DataInputs/Input'
 import { ShimmeringLoader } from 'ui-patterns/ShimmeringLoader'
 
-import { filterByProjects, filterByUsers, sortAuditLogs } from './AuditLogs.utils'
+import {
+  filterByProjectRefSearch,
+  filterByProjects,
+  filterByUsers,
+  sortAuditLogs,
+} from './AuditLogs.utils'
 import { LogDetailsPanel } from '@/components/interfaces/AuditLogs/LogDetailsPanel'
 import { LogsDatePicker } from '@/components/interfaces/Settings/Logs/Logs.DatePickers'
 import { ScaffoldContainer, ScaffoldSection } from '@/components/layouts/Scaffold'
@@ -38,6 +44,10 @@ import { useCheckEntitlements } from '@/hooks/misc/useCheckEntitlements'
 import { useAsyncCheckPermissions } from '@/hooks/misc/useCheckPermissions'
 
 const logsUpgradeError = 'upgrade to Team or Enterprise Plan to access audit logs.'
+
+// Switch the project filter from a dropdown to a free-text input once the org has more
+// projects than this threshold. The dropdown becomes unwieldy past this size.
+const LARGE_ORG_PROJECT_THRESHOLD = 50
 
 // [Joshen considerations]
 // - Maybe fix the height of the table to the remaining height of the viewport, so that the search input is always visible
@@ -62,6 +72,7 @@ export const AuditLogs = () => {
 
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebounce(search, 500)
+  const [projectRefSearch, setProjectRefSearch] = useState('')
 
   const { can: canReadAuditLogs, isLoading: isLoadingPermissions } = useAsyncCheckPermissions(
     PermissionAction.READ,
@@ -121,11 +132,14 @@ export const AuditLogs = () => {
   const projects =
     useMemo(() => projectsData?.pages.flatMap((page) => page.projects), [projectsData?.pages]) || []
 
+  const totalProjectCount = projectsData?.pages[0]?.pagination.count ?? 0
+  const useProjectRefInput = totalProjectCount > LARGE_ORG_PROJECT_THRESHOLD
+
   const logs = data?.result ?? []
-  const sortedLogs = filterByProjects(
-    filterByUsers(sortAuditLogs(logs, dateSortDesc), filters.users),
-    filters.projects
-  )
+  const baseLogs = filterByUsers(sortAuditLogs(logs, dateSortDesc), filters.users)
+  const sortedLogs = useProjectRefInput
+    ? filterByProjectRefSearch(baseLogs, projectRefSearch)
+    : filterByProjects(baseLogs, filters.projects)
 
   const shouldShowLoadingState =
     (isLoading && fetchStatus !== 'idle') || isLoadingPermissions || isLoadingEntitlements
@@ -180,21 +194,41 @@ export const AuditLogs = () => {
                     activeOptions={filters.users}
                     onSaveFilters={(values) => setFilters({ ...filters, users: values })}
                   />
-                  <FilterPopover
-                    name="Projects"
-                    options={projects}
-                    labelKey="name"
-                    valueKey="ref"
-                    activeOptions={filters.projects}
-                    onSaveFilters={(values) => setFilters({ ...filters, projects: values })}
-                    search={search}
-                    setSearch={setSearch}
-                    hasNextPage={hasNextPage}
-                    isLoading={isLoadingProjects}
-                    isFetching={isFetching}
-                    isFetchingNextPage={isFetchingNextPage}
-                    fetchNextPage={fetchNextPage}
-                  />
+                  {useProjectRefInput ? (
+                    <Input
+                      size="tiny"
+                      autoComplete="off"
+                      icon={<Search size={14} />}
+                      value={projectRefSearch}
+                      onChange={(e) => setProjectRefSearch(e.target.value)}
+                      placeholder="Filter by project ref"
+                      actions={
+                        projectRefSearch.length > 0 ? (
+                          <X
+                            size={14}
+                            className="cursor-pointer mr-1"
+                            onClick={() => setProjectRefSearch('')}
+                          />
+                        ) : null
+                      }
+                    />
+                  ) : (
+                    <FilterPopover
+                      name="Projects"
+                      options={projects}
+                      labelKey="name"
+                      valueKey="ref"
+                      activeOptions={filters.projects}
+                      onSaveFilters={(values) => setFilters({ ...filters, projects: values })}
+                      search={search}
+                      setSearch={setSearch}
+                      hasNextPage={hasNextPage}
+                      isLoading={isLoadingProjects}
+                      isFetching={isFetching}
+                      isFetchingNextPage={isFetchingNextPage}
+                      fetchNextPage={fetchNextPage}
+                    />
+                  )}
                   <LogsDatePicker
                     hideWarnings
                     value={dateRange}

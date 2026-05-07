@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { describe, expect, test } from 'vitest'
 
 import {
+  filterByProjectRefSearch,
   filterByProjects,
   filterByUsers,
   sortAuditLogs,
@@ -16,7 +17,7 @@ const TS_A = 1777471903844000
 const TS_B = 1777471903845000
 const TS_C = 1777471903846000
 
-function makeLog(overrides: Partial<AuditLog> = {}): AuditLog {
+function makeLog(overrides: Partial = {}): AuditLog {
   return {
     timestamp: TS_A,
     request_id: 'req-1',
@@ -128,5 +129,39 @@ describe('filterByProjects', () => {
 
   test('returns empty array when no logs match', () => {
     expect(filterByProjects([logA, logB, logC], ['proj-unknown'])).toEqual([])
+  })
+})
+
+describe('filterByProjectRefSearch', () => {
+  test('returns all logs when search is empty', () => {
+    expect(filterByProjectRefSearch([logA, logB, logC], '')).toEqual([logA, logB, logC])
+  })
+
+  test('returns all logs when search is whitespace', () => {
+    expect(filterByProjectRefSearch([logA, logB, logC], '   ')).toEqual([logA, logB, logC])
+  })
+
+  test('matches by substring on project_ref', () => {
+    const result = filterByProjectRefSearch([logA, logB, logC], 'proj-1')
+    expect(result.map((l) => l.request_id)).toEqual(['req-a'])
+  })
+
+  test('matches multiple logs sharing the substring', () => {
+    const result = filterByProjectRefSearch([logA, logB, logC], 'proj')
+    expect(result.map((l) => l.request_id)).toEqual(['req-a', 'req-b'])
+  })
+
+  test('is case-insensitive', () => {
+    const result = filterByProjectRefSearch([logA, logB, logC], 'PROJ-2')
+    expect(result.map((l) => l.request_id)).toEqual(['req-b'])
+  })
+
+  test('excludes logs with no project_ref', () => {
+    const result = filterByProjectRefSearch([logA, logC], 'proj')
+    expect(result.map((l) => l.request_id)).toEqual(['req-a'])
+  })
+
+  test('returns empty array when no logs match', () => {
+    expect(filterByProjectRefSearch([logA, logB, logC], 'unknown')).toEqual([])
   })
 })
