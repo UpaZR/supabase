@@ -17,7 +17,7 @@ const TS_A = 1777471903844000
 const TS_B = 1777471903845000
 const TS_C = 1777471903846000
 
-function makeLog(overrides: Partial = {}): AuditLog {
+function makeLog(overrides: Partial<AuditLog> = {}): AuditLog {
   return {
     timestamp: TS_A,
     request_id: 'req-1',
