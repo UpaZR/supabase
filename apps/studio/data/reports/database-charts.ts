@@ -1,3 +1,6 @@
+import { COMPUTE_MAX_IOPS } from 'shared-data'
+
+import { mapComputeSizeNameToAddonVariantId } from '@/components/interfaces/DiskManagement/DiskManagement.utils'
 import { compactNumberFormatter } from '@/components/ui/Charts/Charts.utils'
 import { ReportAttributes } from '@/components/ui/Charts/ComposedChart.utils'
 import { DiskAttributesData } from '@/data/config/disk-attributes-query'
@@ -15,12 +18,20 @@ export const getReportAttributesV2: (
   isSpendCapEnabled?: boolean
 ) => ReportAttributes[] = (
   entitledFeatures,
-  _project,
+  project,
   diskConfig,
   maxConnections,
   pgBouncerMaxConnections,
   isSpendCapEnabled
 ) => {
+  const provisionedDiskIops = diskConfig?.attributes?.iops
+  const computeIopsLimit =
+    COMPUTE_MAX_IOPS[mapComputeSizeNameToAddonVariantId(project?.infra_compute_size)]
+  const effectiveMaxIops =
+    typeof provisionedDiskIops === 'number' && typeof computeIopsLimit === 'number'
+      ? Math.min(provisionedDiskIops, computeIopsLimit)
+      : provisionedDiskIops
+
   return [
     {
       id: 'ram-usage',
@@ -60,6 +71,33 @@ export const getReportAttributesV2: (
           label: 'Free',
           tooltip:
             'Unallocated memory available for use. A small portion is always reserved by the operating system',
+        },
+      ],
+    },
+    {
+      id: 'swap-usage',
+      label: 'Swap usage',
+      docsUrl: `${DOCS_URL}/guides/telemetry/reports#memory-usage`,
+      hide: false,
+      showTooltip: true,
+      showLegend: false,
+      hideChartType: false,
+      defaultChartStyle: 'bar',
+      showMaxValue: false,
+      showGrid: true,
+      syncId: 'database-reports',
+      valuePrecision: 2,
+      YAxisProps: {
+        width: 75,
+        tickFormatter: (value: any) => formatBytes(value, 2),
+      },
+      attributes: [
+        {
+          attribute: 'swap_usage',
+          provider: 'infra-monitoring',
+          label: 'Swap',
+          tooltip:
+            'Swap space in use by the operating system. Sustained swap usage indicates memory pressure and may degrade database performance',
         },
       ],
     },
@@ -155,6 +193,38 @@ export const getReportAttributesV2: (
       ],
     },
     {
+      id: 'network-throughput',
+      label: 'Network throughput',
+      syncId: 'database-reports',
+      hide: false,
+      showTooltip: true,
+      format: 'bytes-per-second',
+      valuePrecision: 1,
+      showLegend: true,
+      showMaxValue: false,
+      hideChartType: false,
+      showGrid: true,
+      YAxisProps: {
+        width: 70,
+        tickFormatter: (value: any) => `${formatBytes(value, 1)}/s`,
+      },
+      defaultChartStyle: 'stackedAreaLine',
+      attributes: [
+        {
+          attribute: 'network_receive_bytes',
+          provider: 'infra-monitoring',
+          label: 'Network in',
+          tooltip: 'Inbound network throughput (bytes per second)',
+        },
+        {
+          attribute: 'network_transmit_bytes',
+          provider: 'infra-monitoring',
+          label: 'Network out',
+          tooltip: 'Outbound network throughput (bytes per second)',
+        },
+      ],
+    },
+    {
       id: 'disk-iops',
       label: 'Disk Input/Output operations per second (IOPS)',
       docsUrl: `${DOCS_URL}/guides/telemetry/reports#disk-inputoutput-operations-per-second-iops`,
@@ -190,9 +260,9 @@ export const getReportAttributesV2: (
           attribute: 'disk_iops_max',
           provider: 'reference-line',
           label: 'Max IOPS',
-          value: diskConfig?.attributes?.iops,
+          value: effectiveMaxIops,
           tooltip:
-            'Maximum IOPS (Input/Output Operations Per Second) for your current compute size',
+            'Effective maximum IOPS for your current compute and disk configuration. Equal to the lower of the compute IOPS limit and the provisioned disk IOPS',
           isMaxValue: true,
         },
       ],
